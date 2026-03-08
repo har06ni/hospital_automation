@@ -81,23 +81,16 @@ const AppointmentBooking = () => {
         setIsChatLoading(true);
 
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch('/api/ai/patient-ask', {
+            const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    question: chatQuestion,
-                    context: {
-                        diagnosisSummary: "Patient browsing appointment booking"
-                    }
-                })
+                body: JSON.stringify({ message: chatQuestion })
             });
 
             const data = await response.json();
-            setChatHistory(prev => [...prev, { role: 'assistant', content: data.response || "I'm sorry, I couldn't process that." }]);
+            setChatHistory(prev => [...prev, { role: 'assistant', content: data.reply || "I'm sorry, I couldn't process that." }]);
         } catch (err) {
             console.error('Chat Error:', err);
             setChatHistory(prev => [...prev, { role: 'assistant', content: "Connection error. Please try again later." }]);

@@ -1,8 +1,13 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const Groq = require('groq-sdk');
 
 dotenv.config();
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
 
 const app = express();
 
@@ -12,6 +17,27 @@ app.use(express.json());
 
 // Health Check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', env: process.env.NODE_ENV }));
+
+// Specific Groq Chat Endpoint
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message is required' });
+
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        { role: 'system', content: 'You are a professional Hospital AI Assistant. Provide basic health guidance and help with hospital-related questions. For serious symptoms, always recommend consulting a doctor.' },
+        { role: 'user', content: message }
+      ],
+      model: 'llama3-8b-8192',
+    });
+
+    res.json({ reply: chatCompletion.choices[0]?.message?.content || "No response." });
+  } catch (error) {
+    console.error('Chat Error:', error);
+    res.status(500).json({ error: 'AI Error', details: error.message });
+  }
+});
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
