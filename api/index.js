@@ -1,16 +1,23 @@
+```javascript
 const app = require('../backend/src/app');
 const connectDB = require('../backend/src/config/db');
 
-// Vercel serverless function entry point
 module.exports = async (req, res) => {
-    try {
-        // Ensure DB connection
-        await connectDB();
+    // Handle simple ping without DB
+    if (req.url === '/api/ping') {
+        return res.json({ status: 'pong', time: new Date().toISOString() });
+    }
 
-        // Let Express handle the rest
+    try {
+        await connectDB();
         return app(req, res);
     } catch (err) {
         console.error('Vercel Entry Point Error:', err);
-        res.status(500).json({ error: 'Serverless Function Error', details: err.message });
+        res.status(500).json({ 
+            error: 'Serverless Function Error', 
+            message: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined 
+        });
     }
 };
+```
