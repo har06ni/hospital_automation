@@ -1,20 +1,29 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 const AIAudit = require('../models/AIAudit');
 
 /**
- * AI Service: Manages interactions with Gemini AI
+ * AI Service: Manages interactions with Gemini AI and Groq
  * Focuses on medical safety, privacy, and patient assistance.
  */
 class AIService {
     constructor() {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey || apiKey === 'your_gemini_api_key_here') {
-            console.warn('WARNING: Gemini API Key is missing. AI Assistant will run in MOCK mode.');
-            this.mockMode = true;
-        } else {
-            const genAI = new GoogleGenerativeAI(apiKey);
-            this.model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-            this.mockMode = false;
+        // Initialize Gemini
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (geminiKey && geminiKey !== 'dummy_gemini_key' && geminiKey !== 'your_gemini_api_key_here') {
+            const genAI = new GoogleGenerativeAI(geminiKey);
+            this.geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        }
+
+        // Initialize Groq
+        const groqKey = process.env.GROQ_API_KEY;
+        if (groqKey && groqKey !== 'your_groq_api_key_here') {
+            this.groq = new Groq({ apiKey: groqKey });
+        }
+
+        this.mockMode = (!this.geminiModel && !this.groq);
+        if (this.mockMode) {
+            console.warn('WARNING: All AI API Keys are missing. AI Assistant will run in MOCK mode.');
         }
     }
 
@@ -52,33 +61,50 @@ class AIService {
         let aiResponse;
 
         if (this.mockMode) {
-            aiResponse = `[MOCK RESPONSE] Based on your vitals (SpO2: ${context.vitals?.spo2}%), your oxygen saturation is within a normal range. It measures how much oxygen your red blood cells are carrying. \n\nDisclaimer: This information is for guidance only. Please consult your attending doctor for medical decisions.`;
+            aiResponse = `[MOCK RESPONSE] Using Groq engine (Mock): Regarding your question "${question}", please ensure you follow your prescribed recovery plan. \n\nDisclaimer: This information is for guidance only. Please consult your attending doctor for medical decisions.`;
         } else {
-            try {
-                const prompt = `
-                    System Context: ${this.getSystemPrompt()}
-                    Patient Context (Anonymized): ${JSON.stringify(anonymizedContext)}
-                    
-                    Patient Question: "${question}"
-                    
-                    Respond as the Patient Assistant:
-                `;
+            const prompt = `
+                System Context: ${this.getSystemPrompt()}
+                Patient Context (Anonymized): ${JSON.stringify(anonymizedContext)}
+                
+                Patient Question: "${question}"
+                
+                Respond as the Medical Patient Assistant:
+            `;
 
-                const result = await this.model.generateContent(prompt);
-                aiResponse = result.response.text();
+            try {
+                if (this.groq) {
+                    // Use Groq if available (preferred)
+                    const chatCompletion = await this.groq.chat.completions.create({
+                        messages: [
+                            { role: 'system', content: this.getSystemPrompt() },
+                            { role: 'user', content: `Patient Context: ${JSON.stringify(anonymizedContext)}\n\nQuestion: ${question}` }
+                        ],
+                        model: 'mixtral-8x7b-32768',
+                    });
+                    aiResponse = chatCompletion.choices[0].message.content;
+                } else if (this.geminiModel) {
+                    // Fallback to Gemini
+                    const result = await this.geminiModel.generateContent(prompt);
+                    aiResponse = result.response.text();
+                }
             } catch (error) {
-                console.error('Gemini AI Error:', error);
+                console.error('AI Provider Error:', error);
                 aiResponse = "I'm sorry, I'm having trouble connecting to my knowledge base right now. Please try again or ask your nurse.";
             }
         }
 
         // Audit Log for Admin Review
-        await AIAudit.create({
-            patientId,
-            question,
-            response: aiResponse,
-            context: anonymizedContext
-        });
+        try {
+            await AIAudit.create({
+                patientId,
+                question,
+                response: aiResponse,
+                context: anonymizedContext
+            });
+        } catch (auditError) {
+            console.error('Audit Logging Failed:', auditError);
+        }
 
         return aiResponse;
     }

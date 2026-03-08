@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Calendar, Clock, User, Stethoscope, CheckCircle, AlertCircle, MapPin, Phone } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Calendar, Clock, User, Stethoscope, CheckCircle, AlertCircle, MapPin, Phone, MessageSquare, Send, X, Bot, ChevronDown } from 'lucide-react';
 
 const doctors = [
     { id: 1, name: 'Dr. Rajesh Sharma', specialty: 'Cardiology', available: true, nextSlot: '10:30 AM', experience: '15 years', rating: 4.8 },
@@ -22,6 +22,23 @@ const AppointmentBooking = () => {
     const [appointments, setAppointments] = useState([]);
     const [showSuccess, setShowSuccess] = useState(false);
     const [filterSpecialty, setFilterSpecialty] = useState('All');
+
+    // AI Chatbot State
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [chatQuestion, setChatQuestion] = useState('');
+    const [chatHistory, setChatHistory] = useState([
+        { role: 'assistant', content: 'Hello! I am your Medical Assistant. How can I help you with your symptoms or hospital guidance today?' }
+    ]);
+    const [isChatLoading, setIsChatLoading] = useState(false);
+    const chatEndRef = useRef(null);
+
+    const scrollToBottom = () => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        if (isChatOpen) scrollToBottom();
+    }, [chatHistory, isChatOpen]);
 
     const specialties = ['All', ...new Set(doctors.map(d => d.specialty))];
 
@@ -52,6 +69,41 @@ const AppointmentBooking = () => {
         setReason('');
 
         setTimeout(() => setShowSuccess(false), 4000);
+    };
+
+    const handleAskAI = async (e) => {
+        e.preventDefault();
+        if (!chatQuestion.trim() || isChatLoading) return;
+
+        const userMsg = { role: 'user', content: chatQuestion };
+        setChatHistory(prev => [...prev, userMsg]);
+        setChatQuestion('');
+        setIsChatLoading(true);
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/api/ai/patient-ask', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    question: chatQuestion,
+                    context: {
+                        diagnosisSummary: "Patient browsing appointment booking"
+                    }
+                })
+            });
+
+            const data = await response.json();
+            setChatHistory(prev => [...prev, { role: 'assistant', content: data.response || "I'm sorry, I couldn't process that." }]);
+        } catch (err) {
+            console.error('Chat Error:', err);
+            setChatHistory(prev => [...prev, { role: 'assistant', content: "Connection error. Please try again later." }]);
+        } finally {
+            setIsChatLoading(false);
+        }
     };
 
     const today = new Date().toISOString().split('T')[0];
@@ -270,6 +322,88 @@ const AppointmentBooking = () => {
                     </div>
                 </div>
             )}
+
+            {/* AI Chatbot Widget */}
+            <div style={{
+                position: 'fixed', bottom: '30px', right: '30px', zIndex: 1000,
+                display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '15px'
+            }}>
+                {isChatOpen && (
+                    <div className="glass-panel" style={{
+                        width: '350px', height: '450px', display: 'flex', flexDirection: 'column',
+                        overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                        border: '1px solid rgba(14, 165, 233, 0.2)', animation: 'slideUp 0.3s ease'
+                    }}>
+                        {/* Header */}
+                        <div style={{
+                            background: 'var(--primary-color)', padding: '15px', color: 'white',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Bot size={20} />
+                                <span style={{ fontWeight: '700' }}>AI Health Assistant</span>
+                            </div>
+                            <X size={20} style={{ cursor: 'pointer' }} onClick={() => setIsChatOpen(false)} />
+                        </div>
+
+                        {/* Messages */}
+                        <div style={{ flex: 1, padding: '15px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
+                            {chatHistory.map((msg, idx) => (
+                                <div key={idx} style={{
+                                    alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                                    maxWidth: '85%', padding: '10px 14px', borderRadius: '15px',
+                                    fontSize: '0.85rem', lineHeight: '1.4',
+                                    background: msg.role === 'user' ? 'var(--primary-color)' : 'white',
+                                    color: msg.role === 'user' ? 'white' : 'var(--text-primary)',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                    border: msg.role === 'user' ? 'none' : '1px solid #e2e8f0',
+                                    borderBottomRightRadius: msg.role === 'user' ? '2px' : '15px',
+                                    borderBottomLeftRadius: msg.role === 'user' ? '15px' : '2px'
+                                }}>
+                                    {msg.content}
+                                </div>
+                            ))}
+                            {isChatLoading && (
+                                <div style={{ alignSelf: 'flex-start', background: 'white', padding: '10px 15px', borderRadius: '15px', fontSize: '0.8rem', color: '#64748b' }}>
+                                    Thinking...
+                                </div>
+                            )}
+                            <div ref={chatEndRef} />
+                        </div>
+
+                        {/* Input */}
+                        <form onSubmit={handleAskAI} style={{ padding: '15px', background: 'white', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px' }}>
+                            <input
+                                type="text" placeholder="Ask about symptoms..." value={chatQuestion}
+                                onChange={(e) => setChatQuestion(e.target.value)}
+                                style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', outline: 'none' }}
+                            />
+                            <button type="submit" disabled={isChatLoading} style={{
+                                background: 'var(--primary-color)', color: 'white', border: 'none',
+                                width: '36px', height: '36px', borderRadius: '8px', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                            }}>
+                                <Send size={18} />
+                            </button>
+                        </form>
+                    </div>
+                )}
+
+                <button
+                    onClick={() => setIsChatOpen(!isChatOpen)}
+                    style={{
+                        width: '60px', height: '60px', borderRadius: '30px',
+                        background: 'var(--primary-color)', color: 'white', border: 'none',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(14, 165, 233, 0.4)', cursor: 'pointer',
+                        transition: 'transform 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                    {isChatOpen ? <ChevronDown size={28} /> : <MessageSquare size={28} />}
+                </button>
+            </div>
         </div>
     );
 };
