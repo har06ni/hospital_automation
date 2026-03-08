@@ -32,7 +32,12 @@ const Login = () => {
         body: JSON.stringify({ username: email, password }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = { message: 'Unexpected server response' };
+      }
 
       if (response.ok) {
         localStorage.setItem('token', data.token);
@@ -48,10 +53,11 @@ const Login = () => {
           default: navigate('/'); break;
         }
       } else {
-        setError(data.message || 'Invalid credentials.');
+        setError(data.message || `Server Error: ${response.status}`);
       }
     } catch (err) {
-      setError('Connection to server failed. Please try again.');
+      console.error('Login Error:', err);
+      setError(`Connection failed: ${err.message || 'Unknown network error'}`);
     } finally {
       setLoading(false);
     }
