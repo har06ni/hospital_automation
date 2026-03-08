@@ -4,40 +4,33 @@ const connectDB = async () => {
     if (mongoose.connection.readyState >= 1) return;
 
     try {
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log(`Connected to MongoDB`);
-    } catch (error) {
-        if (process.env.NODE_ENV === 'production') {
-            console.error("CRITICAL: MONGODB_URI is missing in Vercel Environment Variables.");
-            throw new Error("Database connection failed: MONGODB_URI missing");
+        if (process.env.MONGODB_URI) {
+            await mongoose.connect(process.env.MONGODB_URI);
+            console.log(`Connected to MongoDB Atlas`);
+        } else {
+            throw new Error("MONGODB_URI not found");
         }
-        console.warn(`Local MongoDB not found. Starting In-Memory Clinical Database...`);
-        const { MongoMemoryServer } = require('mongodb-memory-server');
-        const mongoServer = await MongoMemoryServer.create();
-        const uri = mongoServer.getUri();
-        await mongoose.connect(uri);
+    } catch (error) {
+        console.warn(`Database connection failed or MONGODB_URI missing. Attempting In-Memory Fallback for Review...`);
 
-        const os = require('os');
-        const getIP = () => {
-            const nets = os.networkInterfaces();
-            for (const name of Object.keys(nets)) {
-                for (const net of nets[name]) {
-                    if (net.family === 'IPv4' && !net.internal) return net.address;
-                }
-            }
-            return 'localhost';
-        };
-        const IP = getIP();
+        try {
+            // Need to require locally as these are only for demo/fallback
+            const { MongoMemoryServer } = require('mongodb-memory-server');
+            const mongoServer = await MongoMemoryServer.create();
+            const uri = mongoServer.getUri();
+            await mongoose.connect(uri);
 
-        console.log(`In-Memory Database Ready (Demo Mode)`);
-        console.log(`--------------------------------------------------`);
-        console.log(`🚀 VIEW DATA DIRECTLY IN BROWSER:`);
-        console.log(`=> Local: http://localhost:5000/admin/db`);
-        console.log(`=> Remote: http://${IP}:5000/admin/db`);
-        console.log(`--------------------------------------------------`);
-        console.log(`🔑 FOR MONGODB COMPASS:`);
-        console.log(`=> Connect to: ${uri}`);
-        console.log(`--------------------------------------------------`);
+            // Auto-seed for every new serverless instance in demo mode
+            const { seedClinicalData } = require('../utils/seeder');
+            await seedClinicalData();
+
+            console.log(`In-Memory Database Ready (Emergency Review Mode)`);
+        } catch (innerError) {
+            console.error("Emergency Fallback Failed:", innerError);
+            // On Vercel, mongodb-memory-server might fail to download binary.
+            // If it does, we explain why it's missing.
+            throw new Error("Database Error: MONGODB_URI is missing and In-Memory fallback failed.");
+        }
     }
 };
 
