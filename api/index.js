@@ -1,15 +1,16 @@
 const app = require('../backend/src/app');
 const connectDB = require('../backend/src/config/db');
-const { seedClinicalData } = require('../backend/src/utils/seeder');
 
 // Vercel serverless function entry point
 module.exports = async (req, res) => {
-    // Ensure DB connection
-    await connectDB();
+    try {
+        // Ensure DB connection
+        await connectDB();
 
-    // Optional: Auto-seed on first run if needed (caution with serverless)
-    // await seedClinicalData(); 
-
-    // Handle the request using the Express app
-    return app(req, res);
+        // Let Express handle the rest
+        return app(req, res);
+    } catch (err) {
+        console.error('Vercel Entry Point Error:', err);
+        res.status(500).json({ error: 'Serverless Function Error', details: err.message });
+    }
 };
