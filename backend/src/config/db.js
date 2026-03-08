@@ -9,10 +9,9 @@ const connectDB = async () => {
         console.log(`Connected to MongoDB`);
     } catch (error) {
         if (process.env.NODE_ENV === 'production') {
-            console.error("MongoDB Connection Error in Production:", error);
-            throw error;
+            console.error("CRITICAL: MONGODB_URI is missing in Vercel Environment Variables.");
+            throw new Error("Database connection failed: MONGODB_URI missing");
         }
-        console.warn(`Local MongoDB not found. Starting In-Memory Clinical Database...`);
         console.warn(`Local MongoDB not found. Starting In-Memory Clinical Database...`);
         const mongoServer = await MongoMemoryServer.create();
         const uri = mongoServer.getUri();
