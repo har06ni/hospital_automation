@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
 
 const connectDB = async () => {
     if (mongoose.connection.readyState >= 1) return;
@@ -13,6 +12,7 @@ const connectDB = async () => {
             throw new Error("Database connection failed: MONGODB_URI missing");
         }
         console.warn(`Local MongoDB not found. Starting In-Memory Clinical Database...`);
+        const { MongoMemoryServer } = require('mongodb-memory-server');
         const mongoServer = await MongoMemoryServer.create();
         const uri = mongoServer.getUri();
         await mongoose.connect(uri);
